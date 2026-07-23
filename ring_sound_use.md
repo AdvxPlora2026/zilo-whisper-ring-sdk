@@ -1,6 +1,6 @@
 # Ring Sound SDK 调用手册
 
-本文档面向拿到 `ring_sound.py` 后需要集成戒指能力的开发者。SDK 是一个单文件 Python 模块，当前版本为 `0.3.4`。
+本文档面向拿到 `ring_sound.py` 后需要集成戒指能力的开发者。SDK 是一个单文件 Python 模块，当前版本为 `0.4.1`。
 
 ## 文档导航
 
@@ -82,6 +82,21 @@ if __name__ == "__main__":
 ```
 
 `ring` 是已经连接的 `RingSoundClient` 对象。所有需要访问设备的高层函数都把它作为第一个参数，例如 `sdk.get_system_info(ring)`。
+
+### BLE 写入分片与 0.3.x 迁移
+
+SDK 向戒指的 NUS RX 特征值写入数据时固定按 20 字节分片，最后一片按实际剩余长度发送。该策略不需要调用方配置，也不会关闭 Windows、Bleak 或系统蓝牙栈的 MTU 协商。戒指发送给 SDK 的通知不限制为 20 字节，接收数据仍由 `PacketStream` 按协议包头重组。
+
+从 `0.4.0` 开始，`NusClient` 不再接受 `write_chunk_size` 参数。使用 `0.3.x` 自定义传输的代码需要移除该参数：
+
+```python
+# 0.3.x 旧写法，不再支持
+# transport = sdk.NusClient(address=ADDRESS, write_chunk_size=20)
+
+# 0.4.0
+transport = sdk.NusClient(address=ADDRESS)
+ring = sdk.RingSoundClient(transport=transport)
+```
 
 ## 运行环境配置要求
 
@@ -294,7 +309,8 @@ RingSoundClient
 # 高层 BLE 协议客户端。负责连接、收包重组、请求响应匹配和事件分发。
 
 NusClient
-# 底层 Nordic UART Service BLE 客户端。通常只在调试或自定义传输时直接使用。
+# 底层 Nordic UART Service BLE 客户端。发送固定按 20 字节分片，
+# 通常只在调试或自定义传输时直接使用。
 
 PacketStream
 # 将 BLE 分片拼成完整 Packet，适合协议调试。
@@ -434,7 +450,7 @@ WAVE = 3
 
 | 函数 | 签名 | 返回值 | 使用方式 |
 | --- | --- | --- | --- |
-| `scan_rings()` | `await scan_rings(address=None, timeout_s=5.0)` | `list[BleDeviceInfo]` | 扫描 BLE 设备，可按 MAC 地址过滤。 |
+| `scan_rings()` | `await scan_rings(address=None, timeout_s=25.0)` | `list[BleDeviceInfo]` | 扫描 BLE 设备，可按 MAC 地址过滤。 |
 | `connect_ring()` | `await connect_ring(address, command_timeout_s=10.0, auto_time_sync=False)` | `RingSoundClient` | 创建并连接客户端，调用方负责 `disconnect()`。 |
 | `get_system_info()` | `await get_system_info(client, timeout_s=None)` | `SystemInfo` | 读取设备系统信息。 |
 | `parse_system_info()` | `parse_system_info(body)` | `SystemInfo` | 解析 `0x0102` 包体，通常只用于测试或协议调试。 |
@@ -516,10 +532,12 @@ WAVE = 3
 签名：
 
 ```python
-devices = await scan_rings(address=None, timeout_s=5.0)
+devices = await scan_rings(address=None, timeout_s=25.0)
 ```
 
 返回：`list[BleDeviceInfo]`
+
+`timeout_s` 是本次扫描允许等待的最长时间，默认值为 25 秒；调用方可按需要显式传入其他正数。
 
 常见异常：未安装 `bleak` 时抛出 `TransportError`。
 

@@ -1,6 +1,22 @@
 @preconcurrency import CoreBluetooth
 import Foundation
 
+enum NUSWriteStrategy {
+  static func chunks(_ data: Data) -> [Data] {
+    guard !data.isEmpty else { return [] }
+    return stride(
+      from: 0,
+      to: data.count,
+      by: RingSoundDefaults.nusWriteChunkSize
+    ).map { offset in
+      Data(
+        data.dropFirst(offset)
+          .prefix(RingSoundDefaults.nusWriteChunkSize)
+      )
+    }
+  }
+}
+
 public final class NusClient: NSObject, RingSoundTransport, @unchecked Sendable {
   private final class WriteRequest {
     let chunks: [Data]
@@ -15,7 +31,6 @@ public final class NusClient: NSObject, RingSoundTransport, @unchecked Sendable 
 
   public let identifier: UUID?
   public let writeWithResponse: Bool
-  public let writeChunkSize: Int?
   public let scanTimeout: TimeInterval
 
   private let serviceUUID: CBUUID
@@ -43,8 +58,7 @@ public final class NusClient: NSObject, RingSoundTransport, @unchecked Sendable 
     transmitUUID: String = RingSoundUUID.transmit,
     receiveUUID: String = RingSoundUUID.receive,
     scanTimeout: TimeInterval = RingSoundDefaults.scanTimeout,
-    writeWithResponse: Bool = false,
-    writeChunkSize: Int? = nil
+    writeWithResponse: Bool = false
   ) {
     self.identifier = identifier
     self.serviceUUID = CBUUID(string: serviceUUID)
@@ -52,7 +66,6 @@ public final class NusClient: NSObject, RingSoundTransport, @unchecked Sendable 
     self.receiveUUID = CBUUID(string: receiveUUID)
     self.scanTimeout = scanTimeout
     self.writeWithResponse = writeWithResponse
-    self.writeChunkSize = writeChunkSize
     super.init()
     central = CBCentralManager(delegate: self, queue: bluetoothQueue)
   }
@@ -300,21 +313,11 @@ public final class NusClient: NSObject, RingSoundTransport, @unchecked Sendable 
       return
     }
 
-    let writeType: CBCharacteristicWriteType =
-      writeWithResponse ? .withResponse : .withoutResponse
-    let maximumLength =
-      writeChunkSize.map { max(1, $0) }
-      ?? max(1, peripheral.maximumWriteValueLength(for: writeType))
-    let chunks: [Data]
-    if data.isEmpty {
-      chunks = []
-    } else {
-      chunks = stride(from: 0, to: data.count, by: maximumLength).map {
-        Data(data[$0..<min(data.count, $0 + maximumLength)])
-      }
-    }
     writeRequests.append(
-      WriteRequest(chunks: chunks, continuation: continuation)
+      WriteRequest(
+        chunks: NUSWriteStrategy.chunks(data),
+        continuation: continuation
+      )
     )
     processWrites()
   }

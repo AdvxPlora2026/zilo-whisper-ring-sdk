@@ -2,7 +2,8 @@
 
 本目录现在同时提供：
 
-- Python 原版：`ring_sound.py` 0.3.4
+- 仓库发行版：`v2.0.0`
+- Python 原版：`ring_sound.py` 0.4.1
 - Swift Package：`Package.swift` 与 `Sources/RingSound/`
 
 Swift 版覆盖 Python SDK 的 BLE/NUS 通信、v4 二进制协议、系统信息、日志、校时、录音接收/下载/清空、六轴数据、动作事件以及 Speex/Ogg/PCM/WAV 工具。目标平台为：
@@ -28,11 +29,14 @@ File
 import RingSound
 ```
 
-另一个 Swift Package 也可以通过本地路径引用：
+另一个 Swift Package 可以直接引用 GitHub Release 对应的 tag：
 
 ```swift
 dependencies: [
-    .package(path: "../New project 7"),
+    .package(
+        url: "https://github.com/AdvxPlora2026/zilo-whisper-ring-sdk.git",
+        from: "2.0.0"
+    ),
 ],
 targets: [
     .target(
@@ -42,6 +46,8 @@ targets: [
 ]
 ```
 
+本地开发时也可以暂时改用 `.package(path: "../zilo-whisper-ring-sdk")`。
+
 ## 2. Apple 平台与 Python 版的关键差异
 
 ### 2.1 设备标识不是 MAC 地址
@@ -49,7 +55,7 @@ targets: [
 Python/bleak 版使用类似 `F1:C1:8A:35:40:FB` 的 BLE MAC 地址。Apple 的 CoreBluetooth API 不向应用提供该 MAC 地址，Swift 版使用 `CBPeripheral.identifier` 对应的 UUID：
 
 ```swift
-let devices = try await scanRings(timeout: 8)
+let devices = try await scanRings(timeout: 25)
 for device in devices {
     print(device.name ?? "unknown", device.address, device.rssi ?? 0)
 }
@@ -88,6 +94,12 @@ macOS App 如果启用 App Sandbox，还需要在 target 的 Signing & Capabilit
 - iOS：App 不能启动外部 `ffmpeg` 进程，需要把一个原生 Speex C/C++ 库封装成 `SpeexDecoder` 闭包传给 SDK。
 - 下载原始 `.bin` 不依赖解码器。
 - `buildOggSpeex`、`buildWAV` 等容器工具完全使用 Swift，不依赖 ffmpeg。
+
+### 2.4 NUS 写入分片
+
+Swift v2.0.0 与 Python 0.4.1 一致：发往戒指的 NUS 数据固定按 20 字节分片，最后一片按实际剩余长度发送。`NusClient` 和 `RingSoundClient` 初始化器不再提供 `writeChunkSize` 参数；从旧版迁移时请直接移除该参数。
+
+这个限制只作用于写入。戒指发来的通知仍可能是任意长度，SDK 会通过 `PacketStream` 自动重组完整 v4 协议包。
 
 ## 3. 最小连接示例
 
@@ -413,7 +425,7 @@ do {
 
 ## 9. Python API 到 Swift API 对照
 
-| Python 0.3.4 | Swift |
+| Python 0.4.1 | Swift v2.0.0 |
 | --- | --- |
 | `scan_rings()` | `scanRings()` |
 | `connect_ring()` | `connectRing()` |
@@ -460,6 +472,7 @@ swift build -c release
 
 测试包括：
 
+- SDK 版本、25 秒扫描默认值与固定 20 字节 NUS 写入
 - Python 版生成的 CRC16 与完整协议包字节向量
 - BLE 分片重组和多包输入
 - 系统信息、录音帧、IMU 和动作事件解析

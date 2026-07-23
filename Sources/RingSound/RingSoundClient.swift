@@ -26,13 +26,11 @@ public actor RingSoundClient {
   public init(
     identifier: UUID? = nil,
     commandTimeout: TimeInterval = RingSoundDefaults.commandTimeout,
-    writeWithResponse: Bool = false,
-    writeChunkSize: Int? = nil
+    writeWithResponse: Bool = false
   ) {
     transport = NusClient(
       identifier: identifier,
-      writeWithResponse: writeWithResponse,
-      writeChunkSize: writeChunkSize
+      writeWithResponse: writeWithResponse
     )
     self.commandTimeout = commandTimeout
   }

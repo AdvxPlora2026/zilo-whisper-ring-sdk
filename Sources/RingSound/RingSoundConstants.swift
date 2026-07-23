@@ -1,7 +1,7 @@
 import Foundation
 
 public enum RingSoundSDK {
-  public static let version = "0.3.4"
+  public static let version = "0.4.1"
 }
 
 public enum RingSoundUUID {
@@ -11,8 +11,9 @@ public enum RingSoundUUID {
 }
 
 public enum RingSoundDefaults {
-  public static let scanTimeout: TimeInterval = 8
+  public static let scanTimeout: TimeInterval = 25
   public static let commandTimeout: TimeInterval = 10
+  public static let nusWriteChunkSize = 20
   public static let sampleRate = 16_000
   public static let channels = 1
   public static let bitDepth = 16

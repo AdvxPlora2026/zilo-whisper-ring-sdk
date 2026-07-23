@@ -2,7 +2,7 @@
 
 ## 1. 文档范围
 
-本文档只描述 `ring_sound.py` 当前公开功能实际使用的 BLE 通信命令和包体格式。SDK 版本为 `0.3.4`，语音戒指协议版本为 v4。
+本文档只描述 `ring_sound.py` 当前公开功能实际使用的 BLE 通信命令和包体格式。SDK 版本为 `0.4.1`，语音戒指协议版本为 v4。
 
 公开函数的调用方式、参数和返回值见 [ring_sound_use.md](ring_sound_use.md)，SDK 分层及音频格式见 [README.md](README.md)。
 
@@ -17,6 +17,8 @@
 | RX Characteristic | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | SDK 写入戒指 |
 
 SDK 按 MAC 地址扫描和连接设备，不依赖广播设备名。
+
+SDK 写入 RX Characteristic 时固定按 20 字节分片，最后一片按实际剩余长度发送。该分片是 SDK 的 BLE 发送策略，不是 v4 协议包边界，也不会关闭系统蓝牙栈的 MTU 协商。戒指发送的 TX Characteristic 通知可采用其他分片长度，调用方应交由 `RingSoundClient` 或 `PacketStream` 重组。
 
 ## 3. v4 协议包
 

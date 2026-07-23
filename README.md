@@ -1,17 +1,18 @@
-# zilo-whisper-ring-sdk
-# Ring Sound SDK 技术说明
+# zilo-whisper-ring-sdk：Ring Sound SDK 技术说明
 
-> 移植自AdventureX2026 Zilo提供的Whisper Ring SDK (移植至Swift版本 支持iOS/MacOS)
+> 移植自 AdventureX2026 Zilo 提供的 Whisper Ring SDK，Swift Package 支持 iOS/macOS。
 
 > 需要在 iOS/macOS 中使用时，请直接引用当前目录的 Swift Package，并查阅
 > [ring_sound_swift_use.md](ring_sound_swift_use.md)。Swift 版使用 Apple
-> CoreBluetooth，覆盖 Python SDK 0.3.4 的协议、录音和传感器能力。
+> CoreBluetooth，覆盖 Python SDK 0.4.1 的协议、录音和传感器能力。
+> 本仓库发行版为 v2.0.0，设备通信协议仍为 v4。
 
 本文档说明 Ring Sound Python SDK 的文件组成、内部通信层次、协议边界，以及录音从设备采集到生成 WAV 的完整数据格式。公开函数的参数和调用示例请优先查阅 [ring_sound_use.md](ring_sound_use.md)，原始命令字段请查阅 [protocol.md](protocol.md)。
 
 本文档核对基线：
 
-- Python SDK：`ring_sound.py`，版本 `0.3.4`
+- 仓库发行版：`v2.0.0`
+- Python SDK：`ring_sound.py`，版本 `0.4.1`
 - 通信协议：语音戒指 v4
 - 设备端固件：`V2.000.0001.0015`
 
@@ -26,7 +27,7 @@
 | `protocol.md`       | 协议联调人员      | Python SDK 当前公开功能使用的 v4 通信协议字段表。                                                    |
 | `README.md`         | SDK 使用者和维护者 | 本文档。解释文件关系、SDK 内部分层、字节序、协议包重组、能力边界及音频格式。                                            |
 | `demo.apk`          | 需要查看蓝牙通信    | 已编译的 Android/uni-app 安装包，用于通过蓝牙连接录音设备并提取、播放原始录音、查看imu数据及手势识别情况；不是 Python SDK 的运行依赖。 |
-| `戒指打印模型/`           | 需要打印外壳      | 已解压的戒指机械结构 STEP 模型，包含外圈或外壳及按键；不是 Python SDK 的运行依赖或公开 API。                           |
+| `戒指打印模型/`           | 需要打印外壳      | 已解压的戒指机械结构 STEP 模型，包含外圈或外壳、按键及内环；不是 Python SDK 的运行依赖或公开 API。                        |
 
 `ring_sound.py` 可以直接放入其他 Python 项目并通过以下方式导入：
 
@@ -60,14 +61,14 @@ import ring_sound as sdk
 
 ### 1.2 戒指打印模型
 
-`戒指打印模型/` 是独立的机械结构资源目录，共有 `7`、`9`、`10`、`11` 四个分组、8 个 STEP 文件，总大小为 `538595` 字节：
+`戒指打印模型/` 是独立的机械结构资源目录，共有 `7`、`9`、`10`、`11` 四个分组、12 个 STEP 文件，总大小为 `637733` 字节：
 
-| 分组 | 外圈或外壳 | 按键 |
-| --- | --- | --- |
-| `7` | `戒指打印模型/7/7外圈.STEP` | `戒指打印模型/7/7按键.STEP` |
-| `9` | `戒指打印模型/9/9外圈.STEP` | `戒指打印模型/9/9按键.STEP` |
-| `10` | `戒指打印模型/10/10外壳.STEP` | `戒指打印模型/10/10按键.STEP` |
-| `11` | `戒指打印模型/11/11外圈.STEP` | `戒指打印模型/11/11按键.STEP` |
+| 分组 | 外圈或外壳 | 按键 | 内环 |
+| --- | --- | --- | --- |
+| `7` | `戒指打印模型/7/7外圈.STEP` | `戒指打印模型/7/7按键.STEP` | `戒指打印模型/内环STEP/7内环.STEP` |
+| `9` | `戒指打印模型/9/9外圈.STEP` | `戒指打印模型/9/9按键.STEP` | `戒指打印模型/内环STEP/9内环.STEP` |
+| `10` | `戒指打印模型/10/10外壳.STEP` | `戒指打印模型/10/10按键.STEP` | `戒指打印模型/内环STEP/10内环.STEP` |
+| `11` | `戒指打印模型/11/11外圈.STEP` | `戒指打印模型/11/11按键.STEP` | `戒指打印模型/内环STEP/11内环.STEP` |
 
 这些文件可直接使用支持 STEP 的 CAD 软件查看或转换。`7/9/10/11` 在本目录中只表示模型分组编号，本文档不将其解释为某种标准戒指尺码。进行打印、加工或装配前，应在 CAD 软件中确认模型单位、比例、公差、材料、打印方向和装配间隙。
 
@@ -105,12 +106,14 @@ NusClient
 | TX Characteristic | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | 戒指通知 Python |
 | RX Characteristic | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | Python 写入戒指 |
 
-SDK 使用 MAC 地址筛选设备，不依赖广播设备名。`NusClient` 通过 `bleak` 工作：
+Python SDK 使用 MAC 地址筛选设备，不依赖广播设备名；Swift SDK 使用 CoreBluetooth 提供的 peripheral UUID。Python `NusClient` 通过 `bleak` 工作：
 
-1. 按 MAC 地址扫描目标设备。
+1. 按 MAC 地址扫描目标设备，默认最长扫描 25 秒。
 2. 扫描未返回目标对象时，尝试使用地址直接连接。
 3. 订阅 TX 特征值通知。
-4. 向 RX 特征值分片写入协议包。
+4. 向 RX 特征值写入时固定按 20 字节分片，最后一片按实际剩余长度发送。
+
+Python 0.4.1 与 Swift v2.0.0 都采用固定 20 字节发送策略。该策略不会关闭 Bleak、CoreBluetooth 或系统蓝牙栈的 MTU 协商；设备发给 SDK 的通知也不要求是 20 字节，仍由 `PacketStream` 按 v4 协议包头重组。
 
 BLE 一次通知不等于一个完整业务协议包。一个协议包可能被拆成多次通知，多包也可能连续到达，因此不能直接把单次 BLE 回调数据交给包体解析函数。
 
